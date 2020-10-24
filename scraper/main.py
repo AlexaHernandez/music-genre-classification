@@ -1,36 +1,33 @@
+import sys
 import logging
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 from tqdm import tqdm
 import requests
-import re
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 from sklearn.utils import shuffle
 import pandas as pd
-import numpy as np
 
 def main():
     website = 'https://www.vagalume.com.br'
     genres = {
-        # Other potential canditates with enough data: Indie, maybe pop-rock, maybe reggae, rnb, punk rock, alternative rock, maybe romantica, maybe soul
-        # Also to try: Don't disregard an artist immediately if one of their songs is not in English, keep on looking for a couple of songs before discarding.
-        'Blues': 'browse/style/blues.html',
-        'Rock': 'browse/style/rock.html',
-        'Heavy Metal': 'browse/style/heavy-metal.html',
-        'Pop': 'browse/style/pop.html',
-        'Hip-Hop': 'browse/style/hip-hop.html',
-        'Hardcore': 'browse/style/hardcore.html',
+        'Alternative Rock': 'browse/style/rock-alternativo.html',
+        'Country': 'browse/style/country.html',
         'Hard Rock': 'browse/style/hard-rock.html',
-        'Electronica': 'browse/style/electronica.html',
-        'Folk': 'browse/style/folk.html',
-        'Country': 'browse/style/country.html'
+        'Heavy Metal': 'browse/style/heavy-metal.html',
+        'Hip-Hop': 'browse/style/hip-hop.html',
+        'Indie': 'browse/style/indie.html',
+        'Pop': 'browse/style/pop.html',
+        'R&B': 'browse/style/r-n-b.html',
+        'Rock': 'browse/style/rock.html',
+        'Soul': 'browse/style/soul-music.html'
     }
 
-    max_artist_songs = 150
-    max_genre_songs = 10000
+    max_genre_songs = 8000
+    max_artist_songs = None
 
     data = pd.DataFrame(columns=['artist', 'song', 'lyrics', 'genre'])
     for genre, genre_url in genres.items():
@@ -45,7 +42,8 @@ def main():
 def sample_songs(website, genre_url, max_artist_songs, max_genre_songs, genre):
     data = []
     random_state = 12345
-    
+
+    max_artist_songs = sys.maxsize if max_artist_songs is None else max_artist_songs
     progress_bar = tqdm(total=max_genre_songs, desc=f'Sampling songs from the genre {genre}')
 
     n_total = 0
@@ -59,7 +57,7 @@ def sample_songs(website, genre_url, max_artist_songs, max_genre_songs, genre):
         while not done and n_artist_songs < max_artist_songs and i < len(artist_songs):
             song = get_song(urljoin(website, artist_songs[i]))
 
-            # Stop parsing artist if we hit a non English song (speeds up scraping)
+            # Skip artist if a song is not in English, speeds up scraping
             if not song:
                 break
             
