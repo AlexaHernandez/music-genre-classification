@@ -88,11 +88,11 @@ def get_top_k_predictions(model, x, k=3):
     proba = model.predict_proba(x)
     return (-proba).argsort(axis=1)[:, :k]
 
-def top_k_accuracy_score(truth, top_k_predictions):
+def top_k_accuracy_score(truth, predictions, k):
     hits = 0
     for i in range(truth.shape[0]):
         true_labels = truth[i].nonzero()[0]
-        hits += 1 if np.in1d(top_k_predictions[i], true_labels).any() else 0
+        hits += 1 if np.in1d(predictions[i][:k], true_labels).any() else 0
     return hits/truth.shape[0]
 
 @sklearn.utils.testing.ignore_warnings(category=sklearn.exceptions.ConvergenceWarning)
@@ -130,10 +130,8 @@ def random_search(models, data, search_params, n_datasets=2, n_models=3, multi_l
                     model = sklearn.multiclass.OneVsRestClassifier(model_class(**model_params))
                     binarizer = sklearn.preprocessing.MultiLabelBinarizer()
                     binarizer.fit(data['y_train'])
-                    accuracy_function = top_k_accuracy_score
                 else:
                     model = model_class(**model_params)
-                    accuracy_function = sklearn.metrics.accuracy_score
 
                 y_train = binarizer.transform(data['y_train']) if multi_label else data['y_train']
                 y_valid = binarizer.transform(data['y_valid']) if multi_label else data['y_valid']
@@ -141,13 +139,17 @@ def random_search(models, data, search_params, n_datasets=2, n_models=3, multi_l
 
                 model.fit(X_train, y_train)
 
-                valid_predictions = get_top_k_predictions(model, X_valid, k=2) if multi_label else model.predict(X_valid)
-                test_predictions = get_top_k_predictions(model, X_test, k=2) if multi_label else model.predict(X_test)
+                if multi_label:
+                    valid_predictions = get_top_k_predictions(model, X_valid, k=3)
+                    test_predictions = get_top_k_predictions(model, X_test, k=3)
+                    valid_accuracy = {f'TOP@{k}': top_k_accuracy_score(y_valid, valid_predictions, k) for k in [1, 2, 3]}
+                    test_accuracy = {f'TOP@{k}': top_k_accuracy_score(y_test, test_predictions, k) for k in [1, 2, 3]}
+                else:
+                    valid_predictions = model.predict(X_valid)
+                    test_predictions = model.predict(X_test)
+                    valid_accuracy = sklearn.metrics.accuracy_score(y_valid, valid_predictions)
+                    test_accuracy = sklearn.metrics.accuracy_score(y_test, test_predictions)
                 
-                valid_accuracy = accuracy_function(y_valid, valid_predictions)
-                
-                # This number is only looked at once at the very end when the best models have been chosen based on validation accuracy
-                test_accuracy = accuracy_function(y_test, test_predictions)
                 if not multi_label:
                     test_confusion_matrix = sklearn.metrics.confusion_matrix(y_test, test_predictions, labels=sorted(model.classes_), normalize='true')
                     df_test_confusion_matrix = pd.DataFrame(test_confusion_matrix, index=sorted(model.classes_), columns=model.classes_)
